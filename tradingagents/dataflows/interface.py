@@ -14,6 +14,7 @@ from tqdm import tqdm
 import yfinance as yf
 from openai import OpenAI
 from .config import get_config, set_config, DATA_DIR
+import requests  # Added for OpenRouter direct HTTP calls
 
 
 def get_finnhub_news(
@@ -704,37 +705,32 @@ def get_YFin_data(
 
 def get_stock_news_openai(ticker, curr_date):
     config = get_config()
-    client = OpenAI(base_url=config["backend_url"])
+    headers = {
+        "Authorization": f"Bearer {os.getenv('OPENROUTER_API_KEY')}",
+        "HTTP-Referer": "https://your-app-url.com",  # Optional: your app URL
+        "X-Title": "TradingAgentsApp",  # Optional: your app name
+    }
 
-    response = client.responses.create(
-        model=config["quick_think_llm"],
-        input=[
+    payload = {
+        "model": config["quick_think_llm"],
+        "messages": [
             {
                 "role": "system",
-                "content": [
-                    {
-                        "type": "input_text",
-                        "text": f"Can you search Social Media for {ticker} from 7 days before {curr_date} to {curr_date}? Make sure you only get the data posted during that period.",
-                    }
-                ],
+                "content": f"Can you search Social Media for {ticker} from 7 days before {curr_date} to {curr_date}? Make sure you only get the data posted during that period."
             }
-        ],
-        text={"format": {"type": "text"}},
-        reasoning={},
-        tools=[
-            {
-                "type": "web_search_preview",
-                "user_location": {"type": "approximate"},
-                "search_context_size": "low",
-            }
-        ],
-        temperature=1,
-        max_output_tokens=4096,
-        top_p=1,
-        store=True,
+        ]
+    }
+
+    response = requests.post(
+        "https://openrouter.ai/api/v1/chat/completions",
+        headers=headers,
+        json=payload
     )
 
-    return response.output[1].content[0].text
+    if response.status_code != 200:
+        raise Exception(f"Error fetching data: {response.status_code}, {response.text}")
+
+    return response.json()['choices'][0]['message']['content']
 
 
 def get_global_news_openai(curr_date):

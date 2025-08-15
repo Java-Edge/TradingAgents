@@ -1,7 +1,8 @@
 import chromadb
 from chromadb.config import Settings
 from openai import OpenAI
-
+import requests  # Added for OpenRouter embedding
+import os
 
 class FinancialSituationMemory:
     def __init__(self, name, config):
@@ -14,12 +15,28 @@ class FinancialSituationMemory:
         self.situation_collection = self.chroma_client.create_collection(name=name)
 
     def get_embedding(self, text):
-        """Get OpenAI embedding for a text"""
-        
-        response = self.client.embeddings.create(
-            model=self.embedding, input=text
+        """Get OpenRouter-compatible embedding for a text"""
+        headers = {
+            "Authorization": f"Bearer {os.getenv('OPENROUTER_API_KEY')}",
+            "HTTP-Referer": "https://your-app-url.com",
+            "X-Title": "TradingAgentsApp",
+        }
+
+        payload = {
+            "model": "nomic-ai/nomic-embed-text-v1.5",  # A free and open embedding model
+            "input": text
+        }
+
+        response = requests.post(
+            "https://openrouter.ai/api/v1/embeddings",
+            headers=headers,
+            json=payload
         )
-        return response.data[0].embedding
+
+        if response.status_code != 200:
+            raise Exception(f"Error fetching embedding: {response.status_code}, {response.text}")
+
+        return response.json()['data'][0]['embedding']
 
     def add_situations(self, situations_and_advice):
         """Add financial situations and their corresponding advice. Parameter is a list of tuples (situation, rec)"""
